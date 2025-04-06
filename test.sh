@@ -8,12 +8,13 @@ fail_count=0
 
 run_test() {
   input="$1"
-  expected_alpha="$2"
-  expected_length="$3"
-  expected_info="$4"
+  expected_entropy="$2"
 
   echo "Test input: '$input'"
-  output=$(echo "$input" | ./password_strength)
+  output=$(echo "$input" | ./entropy)
+
+  # Extract the computed entropy from the output
+  computed_entropy=$(echo "$output" | grep -oP 'Entropy: \K[0-9.]+')
 
   status=$?
 
@@ -24,48 +25,29 @@ run_test() {
     return
   fi
 
-  if echo "$output" | grep -q "Approximate alphabet: $expected_alpha"; then
-    echo "✅ Pass: Alphabet = $expected_alpha"
-  else
-    echo "❌ Fail: Expected alphabet $expected_alpha"
-    ((fail_count++))
-    echo "$output"
-    echo
-    return
-  fi
+  # Compare the computed entropy with the expected entropy (allowing for rounding)
+  tolerance="0.01"  # Define tolerance for floating-point comparison
+  diff=$(echo "$computed_entropy - $expected_entropy" | bc)
+  abs_diff=$(echo "$diff" | awk '{if ($1 < 0) print -$1; else print $1}')
 
-  if echo "$output" | grep -q "Length: $expected_length"; then
-    echo "✅ Pass: Length = $expected_length"
+  if (( $(echo "$abs_diff < $tolerance" | bc -l) )); then
+    echo "✅ Pass: Expected entropy = $expected_entropy, Computed entropy = $computed_entropy"
+    ((pass_count++))
   else
-    echo "❌ Fail: Expected length $expected_length"
+    echo "❌ Fail: Expected entropy = $expected_entropy, Computed entropy = $computed_entropy"
     ((fail_count++))
-    echo "$output"
     echo
-    return
   fi
-
-  if echo "$output" | grep -q "Information Content: $expected_info"; then
-    echo "✅ Pass: Information content = $expected_info"
-  else
-    echo "❌ Fail: Expected info content $expected_info"
-    ((fail_count++))
-    echo "$output"
-    echo
-    return
-  fi
-
-  ((pass_count++))
   echo
 }
 
-# Test cases: input, alphabet size, length, info content
-run_test "password"     26 8  "37.60"
-run_test "Password"     52 8  "45.60"
-run_test "P@ssword"     84 8  "51.14"
-run_test "P@ssw0rd"     94 8  "52.44"
-run_test "1234567890"   10 10 "33.22"
-run_test "A1b2C3d4"     62 8  "47.61"
-run_test "!!@#$$%^"     32 8  "40.00"
+# Updated test cases with corrected expected entropy values
+run_test "hello world" 2.845
+run_test "password" 2.750
+run_test "12345" 2.322
+run_test "P@ssw0rd!" 2.948
+run_test "aabbcc" 1.585
+run_test "!!!@@@" 1.000
 
 echo "Tests passed: $pass_count"
 echo "Tests failed: $fail_count"
